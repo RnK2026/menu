@@ -1,0 +1,1 @@
+{"name":"rnk-menu","private":true,"type":"module","scripts":{"test":"node --test","check":"node --check app.js && node --check core.js","dev":"python -m http.server 4173 --bind 127.0.0.1"}}
