@@ -1,7 +1,7 @@
 /** RnK meal API. Keep secrets in Project Settings > Script properties. */
 const MEAL_KEYS = ['breakfast', 'lunch', 'dinner'];
 function output(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
-function emptyMenu() { return {version:1,updatedAt:null,meals:[{key:'breakfast',label:'조식',start:'05:00',end:'06:00'},{key:'lunch',label:'중식',start:'12:00',end:'13:00'},{key:'dinner',label:'석식',start:'18:00',end:'20:00'}],days:[]}; }
+function emptyMenu() { return {version:1,updatedAt:null,meals:[{key:'breakfast',label:'조식',start:'07:30',end:'08:30'},{key:'lunch',label:'중식',start:'12:30',end:'13:30'},{key:'dinner',label:'석식',start:'18:30',end:'19:30'}],days:[]}; }
 function readRecord() {
   const id = PropertiesService.getScriptProperties().getProperty('MENU_FILE_ID');
   if (!id) throw new Error('관리자가 setup 함수를 먼저 실행해야 합니다.');
