@@ -26,7 +26,7 @@ jobs:
       - name: Prepare public files
         run: |
           mkdir _site
-          cp index.html style.css app.js core.js config.json _site/
+          cp index.html style.css app.js core.js voc.js config.json _site/
           cp -r data _site/data
       - uses: actions/upload-pages-artifact@v3
         with:

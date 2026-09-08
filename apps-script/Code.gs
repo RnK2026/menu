@@ -5,10 +5,16 @@ function emptyMenu() { return {version:1,updatedAt:null,meals:[{key:'breakfast',
 function readRecord() {
   const id = PropertiesService.getScriptProperties().getProperty('MENU_FILE_ID');
   if (!id) throw new Error('관리자가 setup 함수를 먼저 실행해야 합니다.');
-  return JSON.parse(DriveApp.getFileById(id).getBlob().getDataAsString('UTF-8'));
+  const record = JSON.parse(DriveApp.getFileById(id).getBlob().getDataAsString('UTF-8'));
+  if (!Array.isArray(record.voc)) record.voc = [];
+  return record;
 }
-function doGet() {
-  try { const record = readRecord(); return output({ok:true,data:record.data,revision:record.revision}); }
+function doGet(e) {
+  try {
+    const record = readRecord();
+    if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc)});
+    return output({ok:true,data:record.data,revision:record.revision});
+  }
   catch (_) { return output({ok:false,error:'저장 서버 초기화가 필요합니다. 관리자에게 문의하세요.'}); }
 }
 function validateMenu(data) {
@@ -30,20 +36,72 @@ function doPost(e) {
   try {
     if (!e || !e.postData || e.postData.contents.length > 2000000) throw new Error('요청 크기를 확인하세요.');
     const body = JSON.parse(e.postData.contents);
-    const secret = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
-    if (!secret || typeof body.password !== 'string' || !samePassword(secret, body.password)) throw new Error('관리자 비밀번호가 올바르지 않습니다.');
-    if (body.action !== 'save') throw new Error('지원하지 않는 요청입니다.');
-    const data = validateMenu(body.data);
     lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) throw new Error('다른 저장을 처리 중입니다. 잠시 후 다시 시도하세요.');
     const current = readRecord();
-    if (body.expectedRevision !== current.revision) throw new Error('다른 관리자가 식단을 수정했습니다. 입력을 임시 저장한 후 새로고침하고 다시 적용하세요.');
-    const record = {revision:Utilities.getUuid(),data:data};
-    const id = PropertiesService.getScriptProperties().getProperty('MENU_FILE_ID');
-    DriveApp.getFileById(id).setContent(JSON.stringify(record));
-    return output({ok:true,data:record.data,revision:record.revision});
+    if (body.action === 'createVoc') {
+      if (body.website) return output({ok:true,posts:publicVoc(current.voc)});
+      const post = validateVoc(body);
+      const duplicate = current.voc.some(function(item) {
+        return item.category === post.category && item.author === post.author && item.title === post.title && item.content === post.content && Date.now() - Date.parse(item.createdAt) < 60000;
+      });
+      if (duplicate) throw new Error('같은 의견이 방금 등록되었습니다. 잠시 후 확인해 주세요.');
+      current.voc.unshift({id:Utilities.getUuid(),category:post.category,author:post.author,title:post.title,content:post.content,createdAt:new Date().toISOString(),reply:'',repliedAt:null});
+      current.voc = current.voc.slice(0,500);
+      writeRecord(current);
+      return output({ok:true,posts:publicVoc(current.voc)});
+    }
+    requireAdmin(body.password);
+    if (body.action === 'save') {
+      const data = validateMenu(body.data);
+      if (body.expectedRevision !== current.revision) throw new Error('다른 관리자가 식단을 수정했습니다. 입력을 임시 저장한 후 새로고침하고 다시 적용하세요.');
+      current.revision = Utilities.getUuid();
+      current.data = data;
+      writeRecord(current);
+      return output({ok:true,data:current.data,revision:current.revision});
+    }
+    if (body.action === 'replyVoc') {
+      const reply = cleanText(body.reply);
+      if (!reply || reply.length > 1000) throw new Error('답변은 1~1000자로 입력하세요.');
+      const target = current.voc.find(function(item){ return item.id === body.id; });
+      if (!target) throw new Error('해당 게시글을 찾을 수 없습니다.');
+      target.reply = reply;
+      target.repliedAt = new Date().toISOString();
+      writeRecord(current);
+      return output({ok:true,posts:publicVoc(current.voc)});
+    }
+    if (body.action === 'deleteVoc') {
+      const before = current.voc.length;
+      current.voc = current.voc.filter(function(item){ return item.id !== body.id; });
+      if (current.voc.length === before) throw new Error('해당 게시글을 찾을 수 없습니다.');
+      writeRecord(current);
+      return output({ok:true,posts:publicVoc(current.voc)});
+    }
+    throw new Error('지원하지 않는 요청입니다.');
   } catch (error) { return output({ok:false,error:error.message || '저장에 실패했습니다.'}); }
   finally { if (lock && lock.hasLock()) lock.releaseLock(); }
+}
+function writeRecord(record) {
+  const id = PropertiesService.getScriptProperties().getProperty('MENU_FILE_ID');
+  DriveApp.getFileById(id).setContent(JSON.stringify(record));
+}
+function requireAdmin(password) {
+  const secret = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
+  if (!secret || typeof password !== 'string' || !samePassword(secret,password)) throw new Error('관리자 비밀번호가 올바르지 않습니다.');
+}
+function cleanText(value) { return String(value == null ? '' : value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'').trim(); }
+function validateVoc(body) {
+  const category = cleanText(body.category), author = cleanText(body.author) || '익명', title = cleanText(body.title), content = cleanText(body.content);
+  if (category !== 'menu' && category !== 'lodging') throw new Error('게시판 종류가 올바르지 않습니다.');
+  if (author.length > 30) throw new Error('이름은 30자 이내로 입력하세요.');
+  if (!title || title.length > 80) throw new Error('제목은 1~80자로 입력하세요.');
+  if (!content || content.length > 1000) throw new Error('내용은 1~1000자로 입력하세요.');
+  return {category:category,author:author,title:title,content:content};
+}
+function publicVoc(posts) {
+  return posts.slice(0,500).map(function(post){
+    return {id:post.id,category:post.category,author:post.author,title:post.title,content:post.content,createdAt:post.createdAt,status:post.reply?'답변 완료':'접수',reply:post.reply||'',repliedAt:post.repliedAt||null};
+  });
 }
 function samePassword(a,b) {
   const first = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,a,Utilities.Charset.UTF_8);
@@ -60,7 +118,7 @@ function setup() {
   const lock = LockService.getScriptLock();lock.waitLock(10000);
   try {
     if (props.getProperty('MENU_FILE_ID')) return;
-    const file = DriveApp.createFile('rnk-meal-data.json',JSON.stringify({revision:Utilities.getUuid(),data:emptyMenu()}),MimeType.PLAIN_TEXT);
+    const file = DriveApp.createFile('rnk-meal-data.json',JSON.stringify({revision:Utilities.getUuid(),data:emptyMenu(),voc:[]}),MimeType.PLAIN_TEXT);
     props.setProperty('MENU_FILE_ID',file.getId());
   } finally { lock.releaseLock(); }
 }
