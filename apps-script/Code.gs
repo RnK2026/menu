@@ -26,8 +26,9 @@ function doGet(e) {
       return output({ok:true,photo:readPhoto(post)});
     }
     return output({ok:true,data:record.data,revision:record.revision});
+  } catch (error) {
+    return output({ok:false,error:error.message || '요청을 처리하지 못했습니다.'});
   }
-  catch (error) { return output({ok:false,error:error.message || '요청을 처리하지 못했습니다.'}); }
 }
 function validateMenu(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.days) || data.days.length > 3660 || !Array.isArray(data.meals) || data.meals.length !== 3) throw new Error('올바르지 않은 식단 형식입니다.');
