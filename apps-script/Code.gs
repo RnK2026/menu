@@ -18,18 +18,14 @@ function readRecord() {
   return record;
 }
 function doGet(e) {
-  try {
-    const record = readRecord();
-    if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc),capabilities:{publicReplies:true,lodgingPhoto:true}});
-    if (e && e.parameter && e.parameter.resource === 'vocPhoto') {
-      const post = findVoc(record,e.parameter.id);
-      if (!post.photoFileId) throw new Error('사진을 볼 수 없습니다.');
-      return output({ok:true,photo:readPhoto(post)});
-    }
-    return output({ok:true,data:record.data,revision:record.revision});
-  } catch (error) {
-    return output({ok:false,error:error.message || '요청을 처리하지 못했습니다.'});
+  const record = readRecord();
+  if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc),capabilities:{publicReplies:true,lodgingPhoto:true}});
+  if (e && e.parameter && e.parameter.resource === 'vocPhoto') {
+    const post = findVoc(record,e.parameter.id);
+    if (!post.photoFileId) throw new Error('사진을 볼 수 없습니다.');
+    return output({ok:true,photo:readPhoto(post)});
   }
+  return output({ok:true,data:record.data,revision:record.revision});
 }
 function validateMenu(data) {
   if (!data || data.version !== 1 || !Array.isArray(data.days) || data.days.length > 3660 || !Array.isArray(data.meals) || data.meals.length !== 3) throw new Error('올바르지 않은 식단 형식입니다.');
