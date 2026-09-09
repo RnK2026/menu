@@ -8,10 +8,11 @@ function readRecord() {
   const record = JSON.parse(DriveApp.getFileById(id).getBlob().getDataAsString('UTF-8'));
   if (!Array.isArray(record.voc)) record.voc = [];
   record.voc = record.voc.map(function(post){
-    post.visibility = post.visibility === 'private' ? 'private' : 'public';
-    post.accessSalt = post.accessSalt || '';
-    post.accessHash = post.accessHash || '';
+    post.visibility = 'public';
     post.photoFileId = post.photoFileId || '';
+    if (!Array.isArray(post.replies)) {
+      post.replies = post.reply ? [{id:'legacy-'+post.id,author:'관리자',content:post.reply,createdAt:post.repliedAt || post.createdAt,isAdmin:true}] : [];
+    }
     return post;
   });
   return record;
@@ -19,10 +20,10 @@ function readRecord() {
 function doGet(e) {
   try {
     const record = readRecord();
-    if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc),capabilities:{privateVoc:true,lodgingPhoto:true}});
+    if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc),capabilities:{publicReplies:true,lodgingPhoto:true}});
     if (e && e.parameter && e.parameter.resource === 'vocPhoto') {
       const post = findVoc(record,e.parameter.id);
-      if (post.visibility !== 'public' || !post.photoFileId) throw new Error('사진을 볼 수 없습니다.');
+      if (!post.photoFileId) throw new Error('사진을 볼 수 없습니다.');
       return output({ok:true,photo:readPhoto(post)});
     }
     return output({ok:true,data:record.data,revision:record.revision});
@@ -59,17 +60,24 @@ function doPost(e) {
         return item.category === post.category && item.author === post.author && item.title === post.title && item.content === post.content && Date.now() - Date.parse(item.createdAt) < 60000;
       });
       if (duplicate) throw new Error('같은 의견이 방금 등록되었습니다. 잠시 후 확인해 주세요.');
-      const id = Utilities.getUuid(), salt = post.visibility === 'private' ? Utilities.getUuid() : '';
+      const id = Utilities.getUuid();
       const photoFileId = body.photo ? createPhoto(body.photo,post.category,id) : '';
-      current.voc.unshift({id:id,category:post.category,visibility:post.visibility,author:post.author,title:post.title,content:post.content,createdAt:new Date().toISOString(),reply:'',repliedAt:null,accessSalt:salt,accessHash:salt?hashPassword(salt,post.postPassword):'',photoFileId:photoFileId});
+      current.voc.unshift({id:id,category:post.category,visibility:'public',author:post.author,title:post.title,content:post.content,createdAt:new Date().toISOString(),replies:[],photoFileId:photoFileId});
       current.voc = current.voc.slice(0,500);
       writeRecord(current);
       return output({ok:true,posts:publicVoc(current.voc)});
     }
-    if (body.action === 'readPrivateVoc') {
-      const target = findVoc(current,body.id);
-      if (target.visibility !== 'private' || !target.accessHash || !sameValue(target.accessHash,hashPassword(target.accessSalt,String(body.postPassword || '')))) throw new Error('게시글 비밀번호가 올바르지 않습니다.');
-      return output({ok:true,post:fullVoc(target,true)});
+    if (body.action === 'createVocReply') {
+      const target = findVoc(current,body.id), reply = validateReply(body);
+      if (reply.isAdmin) requireAdmin(body.password);
+      const duplicate = target.replies.some(function(item){
+        return item.author === reply.author && item.content === reply.content && Date.now() - Date.parse(item.createdAt) < 60000;
+      });
+      if (duplicate) throw new Error('같은 답글이 방금 등록되었습니다.');
+      target.replies.push({id:Utilities.getUuid(),author:reply.author,content:reply.content,createdAt:new Date().toISOString(),isAdmin:reply.isAdmin});
+      target.replies = target.replies.slice(-200);
+      writeRecord(current);
+      return output({ok:true,posts:publicVoc(current.voc)});
     }
     requireAdmin(body.password);
     if (body.action === 'listVocAdmin') return output({ok:true,posts:adminVoc(current.voc)});
@@ -81,15 +89,6 @@ function doPost(e) {
       current.data = data;
       writeRecord(current);
       return output({ok:true,data:current.data,revision:current.revision});
-    }
-    if (body.action === 'replyVoc') {
-      const reply = cleanText(body.reply);
-      if (!reply || reply.length > 1000) throw new Error('답변은 1~1000자로 입력하세요.');
-      const target = findVoc(current,body.id);
-      target.reply = reply;
-      target.repliedAt = new Date().toISOString();
-      writeRecord(current);
-      return output({ok:true,posts:adminVoc(current.voc)});
     }
     if (body.action === 'deleteVoc') {
       const target = findVoc(current,body.id), before = current.voc.length;
@@ -116,15 +115,6 @@ function findVoc(record,id) {
   if (!target) throw new Error('해당 게시글을 찾을 수 없습니다.');
   return target;
 }
-function hashPassword(salt,password) {
-  return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,salt+'|'+password,Utilities.Charset.UTF_8));
-}
-function sameValue(a,b) {
-  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
-  let difference = 0;
-  for (let i=0;i<a.length;i++) difference |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return difference === 0;
-}
 function createPhoto(photo,category,id) {
   if (category !== 'lodging' || !photo || ['image/jpeg','image/png','image/webp'].indexOf(photo.mimeType) < 0 || typeof photo.data !== 'string' || photo.data.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(photo.data)) throw new Error('사진 데이터가 올바르지 않습니다.');
   const bytes = Utilities.base64Decode(photo.data);
@@ -137,23 +127,25 @@ function readPhoto(post) {
 }
 function cleanText(value) { return String(value == null ? '' : value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'').trim(); }
 function validateVoc(body) {
-  const category = cleanText(body.category), visibility = body.visibility === 'private' ? 'private' : 'public', author = cleanText(body.author) || '익명', title = cleanText(body.title), content = cleanText(body.content), postPassword = String(body.postPassword || '');
+  const category = cleanText(body.category), author = cleanText(body.author) || '익명', title = cleanText(body.title), content = cleanText(body.content);
   if (category !== 'menu' && category !== 'lodging') throw new Error('게시판 종류가 올바르지 않습니다.');
   if (author.length > 30) throw new Error('이름은 30자 이내로 입력하세요.');
   if (!title || title.length > 80) throw new Error('제목은 1~80자로 입력하세요.');
   if (!content || content.length > 1000) throw new Error('내용은 1~1000자로 입력하세요.');
-  if (visibility === 'private' && (postPassword.length < 4 || postPassword.length > 50)) throw new Error('비공개 글 비밀번호는 4~50자로 입력하세요.');
-  return {category:category,visibility:visibility,author:author,title:title,content:content,postPassword:postPassword};
+  return {category:category,author:author,title:title,content:content};
 }
-function publicVoc(posts) {
-  return posts.slice(0,500).map(function(post){
-    if (post.visibility === 'private') return {id:post.id,category:post.category,visibility:'private',createdAt:post.createdAt,status:post.reply?'답변 완료':'접수',hasPhoto:Boolean(post.photoFileId),locked:true};
-    return fullVoc(post,false);
-  });
+function validateReply(body) {
+  const isAdmin = body.asAdmin === true || body.asAdmin === 'true', author = isAdmin ? '관리자' : cleanText(body.author) || '익명', content = cleanText(body.content);
+  if (author.length > 30) throw new Error('답글 작성자 이름은 30자 이내로 입력하세요.');
+  if (!isAdmin && author === '관리자') throw new Error('관리자 이름은 관리자 인증 후 사용할 수 있습니다.');
+  if (!content || content.length > 1000) throw new Error('답글은 1~1000자로 입력하세요.');
+  return {author:author,content:content,isAdmin:isAdmin};
 }
+function publicVoc(posts) { return posts.slice(0,500).map(function(post){ return fullVoc(post,false); }); }
 function adminVoc(posts) { return posts.slice(0,500).map(function(post){ return fullVoc(post,false); }); }
 function fullVoc(post,includePhoto) {
-  return {id:post.id,category:post.category,visibility:post.visibility==='private'?'private':'public',author:post.author,title:post.title,content:post.content,createdAt:post.createdAt,status:post.reply?'답변 완료':'접수',reply:post.reply||'',repliedAt:post.repliedAt||null,hasPhoto:Boolean(post.photoFileId),locked:false,photo:includePhoto&&post.photoFileId?readPhoto(post):null};
+  const replies = (post.replies || []).map(function(reply){ return {id:reply.id,author:reply.isAdmin?'관리자':reply.author,content:reply.content,createdAt:reply.createdAt,isAdmin:reply.isAdmin === true}; });
+  return {id:post.id,category:post.category,author:post.author,title:post.title,content:post.content,createdAt:post.createdAt,status:replies.length?'답글 '+replies.length+'개':'접수',replies:replies,hasPhoto:Boolean(post.photoFileId),photo:includePhoto&&post.photoFileId?readPhoto(post):null};
 }
 function samePassword(a,b) {
   const first = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,a,Utilities.Charset.UTF_8);
