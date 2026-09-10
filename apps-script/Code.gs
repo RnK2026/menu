@@ -257,3 +257,10 @@ function setup() {
     props.setProperty('MENU_FILE_ID',file.getId());
   } finally { lock.releaseLock(); }
 }
+/** Run once in the editor after setting VOC_NOTIFY_EMAILS to grant MailApp permission. */
+function authorizeMail() {
+  const recipients = String(PropertiesService.getScriptProperties().getProperty('VOC_NOTIFY_EMAILS') || '').split(',').map(function(value){ return value.trim(); }).filter(Boolean);
+  if (!recipients.length) throw new Error('스크립트 속성에 VOC_NOTIFY_EMAILS를 먼저 설정하세요.');
+  const quota = MailApp.getRemainingDailyQuota();
+  Logger.log('메일 권한 승인 완료. 오늘 남은 발송 가능 수: ' + quota);
+}
