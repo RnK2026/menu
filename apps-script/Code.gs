@@ -68,6 +68,7 @@ function doPost(e) {
       current.voc.unshift({id:id,category:post.category,visibility:'public',author:post.author,title:post.title,content:post.content,createdAt:new Date().toISOString(),replies:[],photoFileId:photoFileId,deleteSalt:deleteSalt,deleteHash:hashPassword(deleteSalt,post.postPassword)});
       current.voc = current.voc.slice(0,500);
       writeRecord(current);
+      notifyVocCreated(current.voc[0],null);
       return output({ok:true,posts:publicVoc(current.voc)});
     }
     if (body.action === 'createVocReply') {
@@ -81,6 +82,7 @@ function doPost(e) {
       target.replies.push({id:Utilities.getUuid(),author:reply.author,content:reply.content,createdAt:new Date().toISOString(),isAdmin:reply.isAdmin,deleteSalt:deleteSalt,deleteHash:deleteSalt?hashPassword(deleteSalt,reply.password):''});
       target.replies = target.replies.slice(-200);
       writeRecord(current);
+      notifyVocCreated(target,target.replies[target.replies.length - 1]);
       return output({ok:true,posts:publicVoc(current.voc)});
     }
     if (body.action === 'deleteOwnVoc') {
@@ -134,6 +136,46 @@ function doPost(e) {
 function writeRecord(record) {
   const id = PropertiesService.getScriptProperties().getProperty('MENU_FILE_ID');
   DriveApp.getFileById(id).setContent(JSON.stringify(record));
+}
+function notifyVocCreated(post,reply) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const recipients = String(props.getProperty('VOC_NOTIFY_EMAILS') || '').split(',').map(function(value){ return value.trim(); }).filter(Boolean);
+    if (!recipients.length) return;
+    const category = post.category === 'lodging' ? '숙소 VoC' : '메뉴 VoC';
+    const eventLabel = reply ? '답글' : '새로운 의견';
+    const subject = '[' + category + (reply ? ' 답글' : '') + '] ' + eventLabel + '이 등록되었습니다';
+    const siteUrl = String(props.getProperty('VOC_NOTIFY_SITE_URL') || 'https://rnk2026.github.io/menu/').trim();
+    const createdAt = formatNotificationDate(reply ? reply.createdAt : post.createdAt);
+    const lines = [
+      category + ' 게시판에 ' + eventLabel + '이 등록되었습니다.',
+      '',
+      '작성자: ' + (reply ? reply.author : post.author),
+      '등록일시: ' + createdAt
+    ];
+    if (!reply) {
+      lines.push('제목: ' + post.title);
+      lines.push('', '내용:', post.content);
+      if (post.category === 'lodging' && post.photoFileId) lines.push('', '첨부 사진: 있음');
+    } else {
+      lines.push('원문 제목: ' + post.title);
+      lines.push('', '답글 내용:', reply.content);
+    }
+    lines.push('', '게시판 확인:', siteUrl + (post.category === 'lodging' ? '#stay-voc' : '#menu-voc'));
+    const body = lines.join('\n');
+    MailApp.sendEmail({to:recipients.join(','),subject:subject,body:body,htmlBody:notificationHtml(lines)});
+  } catch (error) {
+    console.error('VoC 알림 메일 발송 실패: ' + (error.message || error));
+  }
+}
+function formatNotificationDate(value) {
+  return Utilities.formatDate(new Date(value), 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+}
+function notificationHtml(lines) {
+  return '<div style="font-family:Arial,sans-serif;line-height:1.6;white-space:pre-wrap">' + lines.map(escapeNotificationHtml).join('\n') + '</div>';
+}
+function escapeNotificationHtml(value) {
+  return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function requireAdmin(password) {
   const secret = PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD');
