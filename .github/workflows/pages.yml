@@ -24,13 +24,10 @@ jobs:
       - run: npm test && npm run check
       - uses: actions/configure-pages@v5
       - name: Prepare public files
-        run: |
-          mkdir _site
-          cp index.html style.css app.js core.js voc.js config.json _site/
-          cp -r data _site/data
+        run: npm run build -- rnk
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: _site/rnk
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
