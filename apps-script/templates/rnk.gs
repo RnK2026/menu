@@ -221,11 +221,11 @@ function fullVoc(post,includePhoto) {
   const replies = (post.replies || []).map(function(reply){ return {id:reply.id,author:reply.isAdmin?'관리자':reply.author,content:reply.content,createdAt:reply.createdAt,isAdmin:reply.isAdmin === true,canSelfDelete:reply.isAdmin === true || Boolean(reply.deleteHash)}; });
   return {id:post.id,category:post.category,author:post.author,title:post.title,content:post.content,createdAt:post.createdAt,status:replies.length?'답글 '+replies.length+'개':'접수',replies:replies,canSelfDelete:Boolean(post.deleteHash),hasPhoto:Boolean(post.photoFileId),photo:includePhoto&&post.photoFileId?readPhoto(post):null};
 }
-/** Run once in the editor after setting ADMIN_PASSWORD (at least 16 characters). */
+/** Run once in the editor after setting ADMIN_PASSWORD (at least 8 characters). */
 function setup() {
   const props = PropertiesService.getScriptProperties();
   const password = props.getProperty('ADMIN_PASSWORD');
-  if (!password || password.length < 16) throw new Error('스크립트 속성에 16자 이상 ADMIN_PASSWORD를 설정하세요.');
+  if (!password || password.length < 8) throw new Error('스크립트 속성에 8자 이상 ADMIN_PASSWORD를 설정하세요.');
   const lock = LockService.getScriptLock();lock.waitLock(10000);
   try {
     if (props.getProperty('MENU_FILE_ID')) return;

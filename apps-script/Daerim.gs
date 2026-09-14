@@ -63,11 +63,11 @@ function doPost(e) {
   } catch(error) { return output({ok:false,error:error.message}); }
   finally { if(lock && lock.hasLock()) lock.releaseLock(); }
 }
-/** Run in a NEW project with its own ADMIN_PASSWORD (16+ characters). */
+/** Run in a NEW project with its own ADMIN_PASSWORD (8+ characters). */
 function setup() {
   const props = properties(), password=props.getProperty('ADMIN_PASSWORD');
   if(props.getProperty('MENU_FILE_ID')) throw new Error('기존 서비스 프로젝트입니다. 대림용 새 프로젝트에서 실행하세요.');
-  if(!password || password.length<16) throw new Error('16자 이상 ADMIN_PASSWORD를 설정하세요.');
+  if(!password || password.length<8) throw new Error('8자 이상 ADMIN_PASSWORD를 설정하세요.');
   const lock=LockService.getScriptLock();lock.waitLock(10000);
   try {
     if(props.getProperty('DAERIM_MENU_FILE_ID')) return;

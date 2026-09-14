@@ -50,6 +50,7 @@ test('Daerim backend isolates data, refuses VoC, validates password and revision
   assert.equal(record.revision,'old');
   assert.equal(post(save).ok,true);assert.equal(record.data.days[0].breakfast,'-');
   assert.equal(locked,false);
-  ctx.setup();assert.equal(created,0);
+  props.ADMIN_PASSWORD='1234567';assert.throws(()=>ctx.setup(),/8자 이상/);
+  props.ADMIN_PASSWORD='12345678';ctx.setup();assert.equal(created,0);
   props.MENU_FILE_ID='existing-rnk';assert.throws(()=>ctx.setup(),/새 프로젝트/);
 });

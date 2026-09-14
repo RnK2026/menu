@@ -13,7 +13,7 @@ GitHub Pages에서 동작하는 반응형 식단 안내 사이트입니다. Goog
 ## 1. Google Apps Script 연결 (최초 한 번)
 1. https://script.google.com 에서 새 프로젝트를 만듭니다.
 2. `apps-script/Code.gs` 내용을 편집기의 Code.gs에 붙여넣습니다.
-3. 프로젝트 설정 → 스크립트 속성에 `ADMIN_PASSWORD`를 추가하고 16자 이상의 긴 비밀번호를 직접 설정합니다. 비밀번호를 저장소나 config.json에 넣지 마세요.
+3. 프로젝트 설정 → 스크립트 속성에 `ADMIN_PASSWORD`를 추가하고 8자 이상의 비밀번호를 직접 설정합니다. 비밀번호를 저장소나 config.json에 넣지 마세요.
 4. 여러 명에게 VoC 알림을 보내려면 스크립트 속성에 `VOC_NOTIFY_EMAILS`를 추가하고 주소를 쉼표로 구분해 입력합니다. 예: `admin1@example.com,admin2@example.com,admin3@example.com`. 선택 속성 `VOC_NOTIFY_SITE_URL`에는 게시판 링크의 기준 주소를 입력할 수 있습니다.
 5. 편집기에서 `setup` 함수를 선택해 실행하고 Google Drive 권한을 승인합니다. 내 드라이브에 전용 `rnk-meal-data.json` 파일이 만들어지고 파일 ID가 스크립트 속성에 저장됩니다. 재실행해도 기존 파일을 초기화하지 않습니다.
 6. 배포 → 새 배포 → 웹 앱: 실행 사용자는 **나**, 액세스 권한은 **모든 사용자**로 설정하고 배포합니다. 조직 계정 정책으로 익명 웹 앱이 금지되어 있으면 허용되는 계정 또는 다른 백엔드가 필요합니다.
@@ -73,7 +73,7 @@ RnK는 main 푸시 시 자동 배포됩니다. 대림 저장소에는 `deploymen
 
 1. https://script.google.com 에서 **새 프로젝트**를 만듭니다. 기존 RnK 프로젝트는 그대로 유지합니다.
 2. `apps-script/Daerim.gs` 전체를 새 프로젝트의 `Code.gs`에 붙여넣습니다. 이 파일에는 VoC와 메일 기능이 없습니다.
-3. 프로젝트 설정 → 스크립트 속성에 대림 전용 `ADMIN_PASSWORD`를 16자 이상으로 설정합니다.
+3. 프로젝트 설정 → 스크립트 속성에 대림 전용 `ADMIN_PASSWORD`를 8자 이상으로 설정합니다.
 4. `setup` 함수를 실행하고 Drive 권한을 승인합니다. `daerim-meal-data.json` 파일과 `DAERIM_MENU_FILE_ID` 속성이 생성됩니다. 재실행해도 기존 대림 데이터는 유지됩니다.
 5. 웹 앱으로 배포합니다. 실행 사용자: 나, 액세스 권한: 모든 사용자.
 6. `/exec` URL을 공통 저장소의 `services/daerim/config.json`의 `apiUrl`에 저장하고 커밋·푸시합니다. 기존 RnK의 URL을 넣으면 대림 서버 확인 단계에서 거부됩니다.
