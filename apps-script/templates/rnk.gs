@@ -23,7 +23,7 @@ function readRecord() {
 }
 function doGet(e) {
   const record = readRecord();
-  if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc,record),translationVersion:1,capabilities:{publicReplies:true,lodgingPhoto:true,ownerDelete:true,bulkDelete:true}});
+  if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc,record),translationVersion:1,capabilities:{publicReplies:true,lodgingPhoto:true,ownerDelete:true,bulkDelete:true,vehicleVoc:true}});
   if (e && e.parameter && e.parameter.resource === 'vocPhoto') {
     const post = findVoc(record,e.parameter.id);
     if (!post.photoFileId) throw new Error('사진을 볼 수 없습니다.');
@@ -127,7 +127,7 @@ function notifyVocCreated(post,reply) {
     const props = PropertiesService.getScriptProperties();
     const recipients = String(props.getProperty('VOC_NOTIFY_EMAILS') || '').split(',').map(function(value){ return value.trim(); }).filter(Boolean);
     if (!recipients.length) return;
-    const category = post.category === 'lodging' ? '숙소 VoC' : '메뉴 VoC';
+    const category = {menu:'메뉴 VoC',lodging:'숙소 VoC',vehicle:'차량 VoC'}[post.category];
     const eventLabel = reply ? '답글' : '새로운 의견';
     const subject = '[' + category + (reply ? ' 답글' : '') + '] ' + eventLabel + '이 등록되었습니다';
     const siteUrl = String(props.getProperty('VOC_NOTIFY_SITE_URL') || 'https://rnk2026.github.io/menu/').trim();
@@ -141,12 +141,12 @@ function notifyVocCreated(post,reply) {
     if (!reply) {
       lines.push('제목: ' + post.title);
       lines.push('', '내용:', post.content);
-      if (post.category === 'lodging' && post.photoFileId) lines.push('', '첨부 사진: 있음');
+      if (post.photoFileId) lines.push('', '첨부 사진: 있음');
     } else {
       lines.push('원문 제목: ' + post.title);
       lines.push('', '답글 내용:', reply.content);
     }
-    lines.push('', '게시판 확인:', siteUrl + (post.category === 'lodging' ? '#stay-voc' : '#menu-voc'));
+    lines.push('', '게시판 확인:', siteUrl.split('#')[0] + '#' + post.category + '-voc');
     const body = lines.join('\n');
     MailApp.sendEmail({to:recipients.join(','),subject:subject,body:body,htmlBody:notificationHtml(lines)});
   } catch (error) {
@@ -190,7 +190,7 @@ function deletePost(record,post) {
   record.voc = record.voc.filter(function(item){ return item.id !== post.id; });
 }
 function createPhoto(photo,category,id) {
-  if (category !== 'lodging' || !photo || ['image/jpeg','image/png','image/webp'].indexOf(photo.mimeType) < 0 || typeof photo.data !== 'string' || photo.data.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(photo.data)) throw new Error('사진 데이터가 올바르지 않습니다.');
+  if ((category !== 'lodging' && category !== 'vehicle') || !photo || ['image/jpeg','image/png','image/webp'].indexOf(photo.mimeType) < 0 || typeof photo.data !== 'string' || photo.data.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(photo.data)) throw new Error('사진 데이터가 올바르지 않습니다.');
   const bytes = Utilities.base64Decode(photo.data);
   if (bytes.length > 950000) throw new Error('사진은 압축 후 950KB 이하여야 합니다.');
   return DriveApp.createFile(Utilities.newBlob(bytes,photo.mimeType,'voc-'+id+'.jpg')).getId();
@@ -202,7 +202,7 @@ function readPhoto(post) {
 function cleanText(value) { return String(value == null ? '' : value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g,'').trim(); }
 function validateVoc(body) {
   const category = cleanText(body.category), author = cleanText(body.author) || '익명', title = cleanText(body.title), content = cleanText(body.content), postPassword = String(body.postPassword || '');
-  if (category !== 'menu' && category !== 'lodging') throw new Error('게시판 종류가 올바르지 않습니다.');
+  if (category !== 'menu' && category !== 'lodging' && category !== 'vehicle') throw new Error('게시판 종류가 올바르지 않습니다.');
   if (author.length > 30) throw new Error('이름은 30자 이내로 입력하세요.');
   if (!title || title.length > 80) throw new Error('제목은 1~80자로 입력하세요.');
   if (!content || content.length > 1000) throw new Error('내용은 1~1000자로 입력하세요.');

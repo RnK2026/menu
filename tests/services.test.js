@@ -14,6 +14,8 @@ test('shared meal code, independent config, no VoC in Daerim output',()=>{
   assert.equal(read('_site/daerim/core.js'),read('_site/rnk/core.js'));
   assert.doesNotMatch(read('_site/daerim/index.html'),/VoC|voc-section|admin-voc|data-tab=".*voc/);
   assert.match(read('_site/rnk/index.html'),/id="menu-voc"/);
+  assert.match(read('_site/rnk/index.html'),/id="vehicle-voc"/);
+  assert.doesNotMatch(read('_site/daerim/index.html'),/vehicle-voc|차량 VoC/);
   assert.match(read('_site/daerim/index.html'),/대림/);
   assert.equal(existsSync('_site/daerim/voc-app.js'),false);
   const daerimURL=JSON.parse(read('_site/daerim/config.json')).apiUrl;

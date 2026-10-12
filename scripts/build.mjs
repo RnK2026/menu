@@ -6,7 +6,7 @@ export function build(target='rnk',out=`_site/${target}`){
   if(!['rnk','daerim'].includes(target))throw Error('Unknown service');
   mkdir(out,{recursive:true});mkdir(path.join(out,'data'),{recursive:true});
   let html=get('index.html');
-  if(target==='daerim')html=html.replace(/<!-- VOC-START -->[\s\S]*?<!-- VOC-END -->/,'').replace(/<!-- ADMIN-VOC-START -->[\s\S]*?<!-- ADMIN-VOC-END -->/,'').replace(/<button data-tab="(?:menu-voc|lodging-voc)">[^<]*<\/button>/g,'').replaceAll('RnK','대림').replace('RNK MEAL','DAERIM MEAL').replace('<span class="logo">R</span>','<span class="logo">D</span>').replace('주간 메뉴와 고객 의견을 관리하세요.','대림의 주간 메뉴를 관리하세요.').replace('저장·삭제할 때 사용','식단을 저장할 때 사용');
+  if(target==='daerim')html=html.replace(/<!-- VOC-START -->[\s\S]*?<!-- VOC-END -->/,'').replace(/<!-- ADMIN-VOC-START -->[\s\S]*?<!-- ADMIN-VOC-END -->/,'').replace(/<button data-tab="(?:menu-voc|lodging-voc|vehicle-voc)">[^<]*<\/button>/g,'').replaceAll('RnK','대림').replace('RNK MEAL','DAERIM MEAL').replace('<span class="logo">R</span>','<span class="logo">D</span>').replace('주간 메뉴와 고객 의견을 관리하세요.','대림의 주간 메뉴를 관리하세요.').replace('저장·삭제할 때 사용','식단을 저장할 때 사용');
   write(path.join(out,'index.html'),html);
   write(path.join(out,'source-revision.txt'),execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim());
   for(const file of ['app.js','core.js','style.css','i18n.js','messages.js','translated-content.js'])copy(file,path.join(out,file));

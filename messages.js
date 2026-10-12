@@ -1,5 +1,9 @@
 // Reviewed interface text. User-authored content is handled separately.
 export const messages = {
+ '차량 VoC':'Vehicle feedback','차량':'Vehicle','차량 VoC 첨부 사진':'Vehicle feedback photo',
+ '차량 운행과 이용에 관한 의견을 남겨주세요.':'Share feedback about vehicle operations and your journey.',
+ '이용한 차량 또는 노선과 이용 일시를 기재해 주시고, 전화번호 등 개인정보는 입력하지 마세요. 작성한 의견과 답글, 첨부 사진은 모든 방문자에게 공개됩니다.':'Include the vehicle or route and the date and time of your journey. Do not enter phone numbers or other personal information. Posts, replies and photos are public.',
+ '차량 VoC를 사용하려면 RnK Apps Script를 업데이트하고 다시 배포해 주세요.':'Update and redeploy the RnK Apps Script to enable vehicle feedback.',
  '오늘의 식탁':'Today’s Table','대림':'Daerim','RnK · 오늘의 식탁':'RnK · Today’s Table','대림 · 오늘의 식탁':'Daerim · Today’s Table',
  '다크 모드 전환':'Toggle dark mode','메인 메뉴':'Main navigation','다음 식사':'Next meal','주간 메뉴':'Weekly menu','메뉴 VoC':'Meal feedback','숙소 VoC':'Accommodation feedback','관리자':'Administrator',
  '다음 식사는 무엇일까요?':'What’s on the menu?','다가오는 식사와 메뉴를 한눈에 확인하세요.':'See your upcoming meals at a glance.','모스크바 시간 기준':'Moscow time','식단을 불러오는 중입니다.':'Loading meals…','식사 시간 안내':'Meal times',
