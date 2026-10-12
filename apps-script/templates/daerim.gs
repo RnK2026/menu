@@ -12,7 +12,7 @@ function doGet(e) {
   try {
     if (e && e.parameter && e.parameter.resource) throw new Error('지원하지 않는 요청입니다.');
     const record = readRecord();
-    return output({ok:true,serviceId:'daerim',data:record.data,revision:record.revision});
+    return output({ok:true,serviceId:'daerim',data:mealTranslations(record),revision:record.revision,translationVersion:1});
   } catch(error) { return output({ok:false,error:error.message}); }
 }
 function doPost(e) {
@@ -20,6 +20,7 @@ function doPost(e) {
   try {
     if (!e || !e.postData || e.postData.contents.length > 2000000) throw new Error('요청 크기를 확인하세요.');
     const body = JSON.parse(e.postData.contents);
+    if(body.action==='previewTranslations' && body.serviceId==='daerim')return previewTranslations(body);
     if (body.action !== 'save' || body.serviceId !== 'daerim') throw new Error('지원하지 않는 요청입니다.');
     requireAdmin(body.password);
     const data = validateMenu(body.data);
@@ -29,9 +30,10 @@ function doPost(e) {
     const current = readRecord();
     if(body.expectedRevision !== current.revision) throw new Error('다른 관리자가 식단을 수정했습니다. 임시 저장 후 새로고침하세요.');
     current.data = data;
+    applyTranslationEdits(current,body.translationEdits);
     current.revision = Utilities.getUuid();
     DriveApp.getFileById(properties().getProperty('DAERIM_MENU_FILE_ID')).setContent(JSON.stringify(current));
-    return output({ok:true,serviceId:'daerim',data:current.data,revision:current.revision});
+    return output({ok:true,serviceId:'daerim',data:mealTranslations(current),revision:current.revision,translationVersion:1});
   } catch(error) { return output({ok:false,error:error.message}); }
   finally { if(lock && lock.hasLock()) lock.releaseLock(); }
 }

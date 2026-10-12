@@ -60,12 +60,12 @@ export function validateVocList(value) {
     const validated = validateVocDraft({...post,postPassword:'view'});
     const {postPassword:_,...content} = validated;
     const replies = validateReplies(post);
-    return {...content,id:post.id,createdAt:post.createdAt,replies,status:replies.length?`답글 ${replies.length}개`:'접수',canSelfDelete:post.canSelfDelete === true,hasPhoto:Boolean(post.hasPhoto),photo:validatePhotoPayload(post.photo)};
+    return {...content,translations:post.translations || {},id:post.id,createdAt:post.createdAt,replies,status:replies.length?`답글 ${replies.length}개`:'접수',canSelfDelete:post.canSelfDelete === true,hasPhoto:Boolean(post.hasPhoto),photo:validatePhotoPayload(post.photo)};
   });
 }
 
-export function formatVocDate(value) {
-  return new Intl.DateTimeFormat('ko-KR', {
+export function formatVocDate(value,locale='ko-KR') {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit'
   }).format(new Date(value));

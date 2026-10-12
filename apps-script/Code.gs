@@ -26,6 +26,115 @@ function samePassword(a,b) {
   return difference === 0;
 }
 
+// Original text is authoritative. Translation runs outside the data-file lock.
+function translationTexts(record) {
+  const texts=[];
+  (record.voc || []).forEach(function(post){texts.push(post.title,post.content);(post.replies || []).forEach(function(reply){texts.push(reply.content);});if(post.reply)texts.push(post.reply);});
+  ((record.data || {}).days || []).slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(day){MEAL_KEYS.forEach(function(key){texts.push(day[key]);});});
+  return Array.from(new Set(texts.filter(function(text){return typeof text==='string' && text.trim() && text.trim()!=='-';})));
+}
+function publicTranslations(record,texts) {
+  const result={};
+  texts.forEach(function(text){
+    const key='$'+text, entry=(record.translations || {})[key];
+    if(!entry)return;
+    const item={};
+    ['ko','en'].forEach(function(lang){if(typeof entry[lang]==='string')item[lang]=entry[lang];});
+    if(entry.manual)item.manual=entry.manual;
+    result[key]=item;
+  });
+  return result;
+}
+function mealTranslations(record) {
+  const texts=[];
+  record.data.days.forEach(function(day){MEAL_KEYS.forEach(function(key){texts.push(day[key]);});});
+  return Object.assign({},record.data,{translations:publicTranslations(record,texts)});
+}
+function applyTranslationEdits(record,edits) {
+  if(edits===undefined)return;
+  if(!Array.isArray(edits) || edits.length>42)throw new Error('번역 교정 형식이 올바르지 않습니다.');
+  const allowed=new Set(translationTexts({data:record.data}));
+  if(!record.translations)record.translations={};
+  edits.forEach(function(edit){
+    if(!edit || !allowed.has(edit.source) || !['ko','en'].includes(edit.lang) || typeof edit.text!=='string' || edit.text.length>10000)throw new Error('번역 교정 형식이 올바르지 않습니다.');
+    const key='$'+edit.source, entry=record.translations[key] || {};
+    entry.generation=Number(entry.generation || 0)+1;
+    if(!entry.manual)entry.manual={};
+    if(edit.text.trim()){entry[edit.lang]=edit.text.trim();entry.manual[edit.lang]=true;}
+    else {delete entry[edit.lang];delete entry.manual[edit.lang];delete entry.retryAt;}
+    record.translations[key]=entry;
+  });
+}
+function translationFileId() {
+  const props=PropertiesService.getScriptProperties();
+  return props.getProperty('DAERIM_MENU_FILE_ID') || props.getProperty('MENU_FILE_ID');
+}
+function translateEntry(source,previous) {
+  const entry=Object.assign({},previous || {});
+  ['ko','en'].forEach(function(lang){if(!entry[lang])entry[lang]=LanguageApp.translate(source,'',lang);});
+  delete entry.retryAt;
+  return entry;
+}
+/** Run once after updating the web app; also grants translation/trigger permissions. */
+function enableTranslations() {
+  readRecord();
+  LanguageApp.translate('안녕하세요','ko','en');
+  if(!ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==='processTranslations';})){
+    ScriptApp.newTrigger('processTranslations').timeBased().everyMinutes(1).create();
+  }
+  processTranslations();
+}
+/** Safe to rerun. Originals, revisions, posts and photos are never replaced. */
+function processTranslations() {
+  // A short property lease prevents overlapping workers without blocking menu saves.
+  const lock=LockService.getScriptLock(), props=PropertiesService.getScriptProperties();
+  if(!lock.tryLock(1000))return;
+  let snapshot;
+  const lease=Utilities.getUuid();
+  try {
+    if(Number(props.getProperty('TRANSLATION_LEASE_UNTIL') || 0)>Date.now())return;
+    snapshot=readRecord();
+    props.setProperty('TRANSLATION_LEASE',lease);
+    props.setProperty('TRANSLATION_LEASE_UNTIL',String(Date.now()+360000));
+  } finally {lock.releaseLock();}
+  try {
+    const pending=translationTexts(snapshot).filter(function(text){const e=(snapshot.translations || {})['$'+text] || {};return (!e.ko || !e.en) && !(e.retryAt>Date.now());}).slice(0,8);
+    const updates={},started=Date.now();
+    for(let i=0;i<pending.length && Date.now()-started<40000;i++){
+      const text=pending[i],key='$'+text;
+      try {updates[key]=translateEntry(text,(snapshot.translations || {})[key]);}
+      catch(error){updates[key]=Object.assign({},(snapshot.translations || {})[key],{retryAt:Date.now()+900000});console.warn('Translation deferred; original saved.');break;}
+    }
+    lock.waitLock(10000);
+    try {
+      const latest=readRecord(),valid=new Set(translationTexts(latest).map(function(s){return '$'+s;}));
+      if(!latest.translations)latest.translations={};
+      Object.keys(updates).forEach(function(key){
+        if(!valid.has(key))return;
+        const current=latest.translations[key] || {},update=updates[key];
+        // A correction or reset made while translating wins over the old snapshot.
+        if((current.generation || 0)!==(((snapshot.translations || {})[key] || {}).generation || 0))return;
+        ['ko','en'].forEach(function(lang){if(!current[lang] && update[lang])current[lang]=update[lang];});
+        if(update.retryAt)current.retryAt=update.retryAt;
+        latest.translations[key]=current;
+      });
+      let pruned=false;
+      Object.keys(latest.translations).forEach(function(key){if(!valid.has(key)){delete latest.translations[key];pruned=true;}});
+      if(pending.length || pruned)DriveApp.getFileById(translationFileId()).setContent(JSON.stringify(latest));
+    } finally {lock.releaseLock();}
+  } finally {
+    lock.waitLock(10000);
+    try {if(props.getProperty('TRANSLATION_LEASE')===lease){props.setProperty('TRANSLATION_LEASE_UNTIL','0');}}
+    finally {lock.releaseLock();}
+  }
+}
+function previewTranslations(body) {
+  requireAdmin(body.password);
+  if(!Array.isArray(body.texts) || body.texts.length>2 || body.texts.some(function(s){return typeof s!=='string' || s.length>5000;}))throw new Error('번역 요청 형식이 올바르지 않습니다.');
+  const result={};
+  body.texts.forEach(function(text){if(text.trim() && text.trim()!=='-')result['$'+text]=translateEntry(text);});
+  return output({ok:true,translations:result});
+}
 /** RnK meal API. Keep secrets in Project Settings > Script properties. */
 function readRecord() {
   const id = PropertiesService.getScriptProperties().getProperty('MENU_FILE_ID');
@@ -51,24 +160,25 @@ function readRecord() {
 }
 function doGet(e) {
   const record = readRecord();
-  if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc),capabilities:{publicReplies:true,lodgingPhoto:true,ownerDelete:true,bulkDelete:true}});
+  if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc,record),translationVersion:1,capabilities:{publicReplies:true,lodgingPhoto:true,ownerDelete:true,bulkDelete:true}});
   if (e && e.parameter && e.parameter.resource === 'vocPhoto') {
     const post = findVoc(record,e.parameter.id);
     if (!post.photoFileId) throw new Error('사진을 볼 수 없습니다.');
     return output({ok:true,photo:readPhoto(post)});
   }
-  return output({ok:true,data:record.data,revision:record.revision});
+  return output({ok:true,data:mealTranslations(record),revision:record.revision,translationVersion:1});
 }
 function doPost(e) {
   let lock;
   try {
     if (!e || !e.postData || e.postData.contents.length > 2000000) throw new Error('요청 크기를 확인하세요.');
     const body = JSON.parse(e.postData.contents);
+    if(body.action==='previewTranslations')return previewTranslations(body);
     lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) throw new Error('다른 저장을 처리 중입니다. 잠시 후 다시 시도하세요.');
     const current = readRecord();
     if (body.action === 'createVoc') {
-      if (body.website) return output({ok:true,posts:publicVoc(current.voc)});
+      if (body.website) return output({ok:true,posts:publicVoc(current.voc,current)});
       const post = validateVoc(body);
       const duplicate = current.voc.some(function(item) {
         return item.category === post.category && item.author === post.author && item.title === post.title && item.content === post.content && Date.now() - Date.parse(item.createdAt) < 60000;
@@ -80,7 +190,7 @@ function doPost(e) {
       current.voc = current.voc.slice(0,500);
       writeRecord(current);
       notifyVocCreated(current.voc[0],null);
-      return output({ok:true,posts:publicVoc(current.voc)});
+      return output({ok:true,posts:publicVoc(current.voc,current)});
     }
     if (body.action === 'createVocReply') {
       const target = findVoc(current,body.id), reply = validateReply(body);
@@ -94,14 +204,14 @@ function doPost(e) {
       target.replies = target.replies.slice(-200);
       writeRecord(current);
       notifyVocCreated(target,target.replies[target.replies.length - 1]);
-      return output({ok:true,posts:publicVoc(current.voc)});
+      return output({ok:true,posts:publicVoc(current.voc,current)});
     }
     if (body.action === 'deleteOwnVoc') {
       const target = findVoc(current,body.id);
       requireDeletePassword(target,body.password,'기존 게시글은 관리자만 삭제할 수 있습니다.');
       deletePost(current,target);
       writeRecord(current);
-      return output({ok:true,posts:publicVoc(current.voc)});
+      return output({ok:true,posts:publicVoc(current.voc,current)});
     }
     if (body.action === 'deleteVocReply') {
       const target = findVoc(current,body.id), reply = target.replies.find(function(item){ return item.id === body.replyId; });
@@ -110,11 +220,11 @@ function doPost(e) {
       else requireDeletePassword(reply,body.password,'기존 답글은 관리자만 삭제할 수 있습니다.');
       target.replies = target.replies.filter(function(item){ return item.id !== body.replyId; });
       writeRecord(current);
-      return output({ok:true,posts:publicVoc(current.voc)});
+      return output({ok:true,posts:publicVoc(current.voc,current)});
     }
     requireAdmin(body.password);
-    if (body.action === 'listVocAdmin') return output({ok:true,posts:adminVoc(current.voc)});
-    if (body.action === 'readVocAdmin') return output({ok:true,post:fullVoc(findVoc(current,body.id),true)});
+    if (body.action === 'listVocAdmin') return output({ok:true,posts:adminVoc(current.voc,current)});
+    if (body.action === 'readVocAdmin') return output({ok:true,post:fullVoc(findVoc(current,body.id),true,current)});
     if (body.action === 'deleteVocMany') {
       if (!Array.isArray(body.ids) || !body.ids.length || body.ids.length > 500) throw new Error('삭제할 게시글을 선택하세요.');
       const selected = {};
@@ -124,21 +234,22 @@ function doPost(e) {
       targets.forEach(function(item){ trashPhoto(item); });
       current.voc = current.voc.filter(function(item){ return !selected[item.id]; });
       writeRecord(current);
-      return output({ok:true,posts:adminVoc(current.voc)});
+      return output({ok:true,posts:adminVoc(current.voc,current)});
     }
     if (body.action === 'save') {
       const data = validateMenu(body.data);
       if (body.expectedRevision !== current.revision) throw new Error('다른 관리자가 식단을 수정했습니다. 입력을 임시 저장한 후 새로고침하고 다시 적용하세요.');
       current.revision = Utilities.getUuid();
       current.data = data;
+      applyTranslationEdits(current,body.translationEdits);
       writeRecord(current);
-      return output({ok:true,data:current.data,revision:current.revision});
+      return output({ok:true,data:mealTranslations(current),revision:current.revision,translationVersion:1});
     }
     if (body.action === 'deleteVoc') {
       const target = findVoc(current,body.id);
       deletePost(current,target);
       writeRecord(current);
-      return output({ok:true,posts:adminVoc(current.voc)});
+      return output({ok:true,posts:adminVoc(current.voc,current)});
     }
     throw new Error('지원하지 않는 요청입니다.');
   } catch (error) { return output({ok:false,error:error.message || '저장에 실패했습니다.'}); }
@@ -243,11 +354,11 @@ function validateReply(body) {
   if (!isAdmin && (password.length < 4 || password.length > 50)) throw new Error('답글 삭제 비밀번호는 4~50자로 입력하세요.');
   return {author:author,content:content,isAdmin:isAdmin,password:password};
 }
-function publicVoc(posts) { return posts.slice(0,500).map(function(post){ return fullVoc(post,false); }); }
-function adminVoc(posts) { return posts.slice(0,500).map(function(post){ return fullVoc(post,false); }); }
-function fullVoc(post,includePhoto) {
+function publicVoc(posts,record) { return posts.slice(0,500).map(function(post){ return fullVoc(post,false,record); }); }
+function adminVoc(posts,record) { return posts.slice(0,500).map(function(post){ return fullVoc(post,false,record); }); }
+function fullVoc(post,includePhoto,record) {
   const replies = (post.replies || []).map(function(reply){ return {id:reply.id,author:reply.isAdmin?'관리자':reply.author,content:reply.content,createdAt:reply.createdAt,isAdmin:reply.isAdmin === true,canSelfDelete:reply.isAdmin === true || Boolean(reply.deleteHash)}; });
-  return {id:post.id,category:post.category,author:post.author,title:post.title,content:post.content,createdAt:post.createdAt,status:replies.length?'답글 '+replies.length+'개':'접수',replies:replies,canSelfDelete:Boolean(post.deleteHash),hasPhoto:Boolean(post.photoFileId),photo:includePhoto&&post.photoFileId?readPhoto(post):null};
+  return {translations:publicTranslations(record || {},[post.title,post.content].concat((post.replies || []).map(function(r){return r.content;}))),id:post.id,category:post.category,author:post.author,title:post.title,content:post.content,createdAt:post.createdAt,status:replies.length?'답글 '+replies.length+'개':'접수',replies:replies,canSelfDelete:Boolean(post.deleteHash),hasPhoto:Boolean(post.photoFileId),photo:includePhoto&&post.photoFileId?readPhoto(post):null};
 }
 /** Run once in the editor after setting ADMIN_PASSWORD (at least 8 characters). */
 function setup() {
