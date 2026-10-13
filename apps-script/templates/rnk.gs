@@ -23,6 +23,7 @@ function readRecord() {
 }
 function doGet(e) {
   const record = readRecord();
+  if (e && e.parameter && e.parameter.resource === 'polls') return output({ok:true,serviceId:'rnk',polls:pollList(record),pollVersion:1});
   if (e && e.parameter && e.parameter.resource === 'voc') return output({ok:true,posts:publicVoc(record.voc,record),translationVersion:1,capabilities:{publicReplies:true,lodgingPhoto:true,ownerDelete:true,bulkDelete:true,vehicleVoc:true}});
   if (e && e.parameter && e.parameter.resource === 'vocPhoto') {
     const post = findVoc(record,e.parameter.id);
@@ -40,6 +41,10 @@ function doPost(e) {
     lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) throw new Error('다른 저장을 처리 중입니다. 잠시 후 다시 시도하세요.');
     const current = readRecord();
+    if (body.action === 'createPoll' || body.action === 'castVote') {
+      if (body.serviceId !== 'rnk') throw new Error('RnK 투표 서버를 확인하세요.');
+      return pollAction(current,body);
+    }
     if (body.action === 'createVoc') {
       if (body.website) return output({ok:true,posts:publicVoc(current.voc,current)});
       const post = validateVoc(body);

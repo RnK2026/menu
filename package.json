@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check app.js && node --check core.js && node --check voc-app.js && node --check voc.js && node --check service.js && node --check i18n.js && node --check messages.js && node --check translated-content.js && node --check scripts/build.mjs",
+    "check": "node --check app.js && node --check core.js && node --check voc-app.js && node --check voc.js && node --check poll-app.js && node --check service.js && node --check i18n.js && node --check messages.js && node --check translated-content.js && node --check scripts/build.mjs",
     "dev": "python -m http.server 4173 --bind 127.0.0.1",
     "build": "node scripts/build.mjs"
   }

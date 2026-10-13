@@ -2,6 +2,7 @@
 function translationTexts(record) {
   const texts=[];
   (record.voc || []).forEach(function(post){texts.push(post.title,post.content);(post.replies || []).forEach(function(reply){texts.push(reply.content);});if(post.reply)texts.push(post.reply);});
+  (record.polls || []).forEach(function(poll){texts.push(poll.title,poll.description);(poll.options || []).forEach(function(option){texts.push(option.text);});});
   ((record.data || {}).days || []).slice().sort(function(a,b){return b.date.localeCompare(a.date);}).forEach(function(day){MEAL_KEYS.forEach(function(key){texts.push(day[key]);});});
   return Array.from(new Set(texts.filter(function(text){return typeof text==='string' && text.trim() && text.trim()!=='-';})));
 }

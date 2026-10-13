@@ -8,6 +8,8 @@ export function t(text){
   const trimmed=text.trim();
   if(Object.hasOwn(messages,trimmed))return text.replace(trimmed,messages[trimmed]);
   const patterns=[
+    [/^결과 · (\d+)명 참여$/,m=>`Results · ${m[1]} participants`],
+    [/^(\d+)표 · (\d+)%$/,m=>`${m[1]} votes · ${m[2]}%`],
     [/^답글 (\d+)개$/,m=>`${m[1]} ${m[1]==='1'?'reply':'replies'}`],[/^(\d+)개 선택$/,m=>`${m[1]} selected`],
     [/^선택한 게시글 (\d+)개와 모든 답글을 삭제할까요\?$/,m=>`Delete ${m[1]} selected posts and all their replies?`],
     [/^(\d+)개 게시글을 삭제했습니다\.$/,m=>`Deleted ${m[1]} posts.`],
