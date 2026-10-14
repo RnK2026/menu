@@ -41,7 +41,7 @@ function doPost(e) {
     lock = LockService.getScriptLock();
     if (!lock.tryLock(10000)) throw new Error('다른 저장을 처리 중입니다. 잠시 후 다시 시도하세요.');
     const current = readRecord();
-    if (body.action === 'createPoll' || body.action === 'castVote') {
+    if (body.action === 'createPoll' || body.action === 'castVote' || body.action === 'deletePolls') {
       if (body.serviceId !== 'rnk') throw new Error('RnK 투표 서버를 확인하세요.');
       return pollAction(current,body);
     }

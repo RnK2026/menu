@@ -1,8 +1,9 @@
-import {getLocale,localize} from './i18n.js';
+import {getLocale,localize,confirmAction} from './i18n.js';
 import {contentNode} from './translated-content.js';
 
 export function initPolls({$,status,safely,request,getApiURL,serviceId}){
   let polls=[],ready=false;
+  const selectedPolls=new Set();
   const localTokens=new Map();
   function savedToken(id){try{return localStorage.getItem(serviceId+'-poll-'+id);}catch{return localTokens.get(id);}}
   function voterToken(id){let token=savedToken(id);if(token)return token;
@@ -42,17 +43,48 @@ export function initPolls({$,status,safely,request,getApiURL,serviceId}){
     const summary=element('div',undefined,'poll-results');summary.append(element('h4',`결과 · ${poll.voteCount}명 참여`));
     for(const option of poll.options)summary.append(row(option,poll));article.append(summary);return article;
   }
+  function renderAdminPolls(){
+    const list=$('#poll-admin-list');list.replaceChildren();
+    for(const id of selectedPolls)if(!polls.some(poll=>poll.id===id))selectedPolls.delete(id);
+    if(!polls.length){list.append(element('div','등록된 투표가 없습니다.','empty'));return;}
+    const toolbar=element('div',undefined,'bulk-toolbar'),selectLabel=element('label'),selectAll=element('input'),count=element('span',`${selectedPolls.size}개 선택`),deleteButton=element('button','선택 투표 삭제','secondary danger');
+    selectAll.type='checkbox';selectAll.checked=selectedPolls.size===polls.length;selectAll.indeterminate=selectedPolls.size>0&&selectedPolls.size<polls.length;
+    selectLabel.append(selectAll,document.createTextNode(' 전체 선택'));
+    selectAll.onchange=()=>{selectedPolls.clear();if(selectAll.checked)polls.forEach(poll=>selectedPolls.add(poll.id));renderAdminPolls();};
+    deleteButton.disabled=!selectedPolls.size;
+    deleteButton.onclick=safely(async()=>{
+      const password=$('#password').value,ids=[...selectedPolls];
+      if(!password)throw Error('관리자 비밀번호를 입력하세요.');
+      if(!ids.length)throw Error('삭제할 투표를 선택하세요.');
+      if(!confirmAction(`선택한 투표 ${ids.length}개와 모든 응답을 삭제할까요?`))return;
+      deleteButton.disabled=true;
+      try{const result=await request({action:'deletePolls',serviceId,password,ids});
+        if(result.serviceId!==serviceId || !Array.isArray(result.polls))throw Error('투표 서버를 확인하세요.');
+        polls=result.polls;selectedPolls.clear();render();status(`${ids.length}개 투표를 삭제했습니다.`);
+      }finally{deleteButton.disabled=false;}
+    });
+    toolbar.append(selectLabel,count,deleteButton);list.append(toolbar);
+    for(const poll of polls){
+      const label=element('label',undefined,'poll-admin-row'),checkbox=element('input'),text=element('div');
+      checkbox.type='checkbox';checkbox.checked=selectedPolls.has(poll.id);
+      checkbox.onchange=()=>{if(checkbox.checked)selectedPolls.add(poll.id);else selectedPolls.delete(poll.id);renderAdminPolls();};
+      text.append(content('strong',poll.title,poll),element('span',poll.closed?'완료':'진행 중','status-badge'));
+      const detail=element('small',`${poll.voteCount}명 참여 · `);detail.append(dateNode(poll.closesAt));text.append(detail);
+      label.append(checkbox,text);list.append(label);
+    }
+    localize(list);
+  }
   function render(){const active=$('#poll-active'),closed=$('#poll-closed');active.replaceChildren();closed.replaceChildren();
     for(const poll of polls){poll.closed=Date.now()>=Date.parse(poll.closesAt);(poll.closed?closed:active).append(card(poll));}
     if(!active.children.length)active.append(element('div','진행 중인 투표가 없습니다.','empty'));
     if(!closed.children.length)closed.append(element('div','완료된 투표가 없습니다.','empty'));
-    localize();
+    renderAdminPolls();localize();
   }
   async function load(){if(!getApiURL()){$('#poll-notice').textContent='투표 서버를 연결해 주세요.';$('#poll-notice').hidden=false;return;}
     try{const response=await fetch(getApiURL()+'?resource=polls',{cache:'no-store',signal:AbortSignal.timeout(30000)});const result=await response.json();
       if(!response.ok||!result.ok||result.pollVersion!==1||!Array.isArray(result.polls)||result.serviceId&&result.serviceId!==serviceId)throw Error('투표 기능을 사용하려면 Apps Script를 업데이트하고 다시 배포해 주세요.');
       polls=result.polls;ready=true;$('#poll-notice').hidden=true;render();
-    }catch(error){ready=false;$('#poll-notice').textContent=error.message;$('#poll-notice').hidden=false;$('#poll-active').replaceChildren();$('#poll-closed').replaceChildren();}
+    }catch(error){ready=false;$('#poll-notice').textContent=error.message;$('#poll-notice').hidden=false;$('#poll-active').replaceChildren();$('#poll-closed').replaceChildren();$('#poll-admin-list').replaceChildren(element('div',error.message,'empty'));}
   }
   const fields=$('#poll-option-fields');
   function optionField(){if(fields.children.length>=20)return;const row=element('div',undefined,'poll-option-field'),input=element('input'),remove=element('button','삭제','secondary');input.maxLength=100;input.required=true;input.placeholder='투표 항목';input.setAttribute('aria-label','투표 항목');remove.type='button';remove.onclick=()=>{if(fields.children.length>2)row.remove();};row.append(input,remove);fields.append(row);}
@@ -69,6 +101,7 @@ export function initPolls({$,status,safely,request,getApiURL,serviceId}){
     }finally{button.disabled=false;}
   });
   $('#poll-refresh').onclick=safely(load);
+  $('#poll-admin-refresh').onclick=safely(async()=>{await load();if(ready)status('최신 투표 목록을 불러왔습니다.');});
   document.addEventListener('languagechange',()=>{for(const node of document.querySelectorAll('[data-poll-date]'))node.textContent=dateText(node.dataset.pollDate);});
   return {load,tick(){if(polls.some(poll=>poll.closed!== (Date.now()>=Date.parse(poll.closesAt))))render();}};
 }

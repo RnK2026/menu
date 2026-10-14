@@ -22,7 +22,7 @@ function doPost(e) {
     if (!e || !e.postData || e.postData.contents.length > 2000000) throw new Error('요청 크기를 확인하세요.');
     const body = JSON.parse(e.postData.contents);
     if(body.action==='previewTranslations' && body.serviceId==='daerim')return previewTranslations(body);
-    if((body.action==='createPoll' || body.action==='castVote') && body.serviceId==='daerim'){
+    if((body.action==='createPoll' || body.action==='castVote' || body.action==='deletePolls') && body.serviceId==='daerim'){
       lock=LockService.getScriptLock();if(!lock.tryLock(10000))throw new Error('다른 저장을 처리 중입니다. 잠시 후 다시 시도하세요.');
       return pollAction(readRecord(),body);
     }

@@ -60,9 +60,21 @@ function pollVote(record,body) {
   if(!poll.anonymous)vote.name=name;
   poll.votes.push(vote);
 }
+function pollDelete(record,body) {
+  requireAdmin(body.password);
+  if(!Array.isArray(body.ids) || !body.ids.length || body.ids.length>500 || body.ids.some(function(id){return typeof id!=='string' || !id;}))throw new Error('삭제할 투표를 선택하세요.');
+  const ids=new Set(body.ids),existing=record.polls || [];
+  if(ids.size!==body.ids.length || ids.size!==existing.filter(function(poll){return ids.has(poll.id);}).length)throw new Error('선택한 투표를 다시 확인하세요.');
+  record.polls=existing.filter(function(poll){return !ids.has(poll.id);});
+  if(record.translations){
+    const used=new Set(translationTexts(record).map(function(text){return '$'+text;}));
+    Object.keys(record.translations).forEach(function(key){if(!used.has(key))delete record.translations[key];});
+  }
+}
 function pollAction(record,body) {
   if(body.action==='createPoll')pollCreate(record,body);
   else if(body.action==='castVote')pollVote(record,body);
+  else if(body.action==='deletePolls')pollDelete(record,body);
   else throw new Error('지원하지 않는 요청입니다.');
   DriveApp.getFileById(translationFileId()).setContent(JSON.stringify(record));
   return output({ok:true,serviceId:PropertiesService.getScriptProperties().getProperty('DAERIM_MENU_FILE_ID')?'daerim':'rnk',polls:pollList(record)});

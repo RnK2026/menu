@@ -48,6 +48,18 @@ for(const serviceId of ['rnk','daerim'])test(serviceId+' polls: admin creation, 
   assert.equal(s.post({action:'castVote',serviceId,pollId:namedPoll.id,optionIds:[namedPoll.options[0].id,namedPoll.options[1].id],voterToken:token(4),name:'이용자'}).ok,false);
   assert.equal(s.post({action:'castVote',serviceId,pollId:namedPoll.id,optionIds:[namedPoll.options[0].id],voterToken:token(4),name:'이용자'}).ok,true);
   assert.deepEqual(Array.from(s.list().polls[0].options[0].names),['이용자']);
+  s.record.translations={'$오늘의 메뉴':{en:'Today’s menu'},'$기존 글':{en:'Existing post'}};
+  const beforeDelete=JSON.stringify(s.record.polls);
+  assert.equal(s.post({action:'deletePolls',serviceId,password:'wrong',ids:[poll.id]}).ok,false);
+  assert.equal(s.post({action:'deletePolls',serviceId,password:'test-admin-password',ids:[poll.id,'missing']}).ok,false);
+  assert.equal(s.post({action:'deletePolls',serviceId,password:'test-admin-password',ids:[poll.id,poll.id]}).ok,false);
+  assert.equal(JSON.stringify(s.record.polls),beforeDelete);
+  const deleted=s.post({action:'deletePolls',serviceId,password:'test-admin-password',ids:[poll.id,namedPoll.id]});
+  assert.equal(deleted.ok,true);assert.equal(deleted.polls.length,0);assert.equal(s.record.polls.length,0);
+  assert.equal(s.record.translations['$오늘의 메뉴'],undefined);
+  if(serviceId==='rnk')assert.equal(s.record.translations['$기존 글'].en,'Existing post');
+  assert.equal(JSON.stringify(s.record.data),before);if(serviceId==='rnk')assert.equal(s.record.voc[0].title,'기존 글');
+  assert.equal(s.record.revision,'old');assert.equal(s.locked,false);
 });
 test('RnK and Daerim poll records remain separate',()=>{
   const rnk=server('rnk'),daerim=server('daerim');
@@ -57,4 +69,6 @@ test('RnK and Daerim poll records remain separate',()=>{
   assert.equal(daerim.post({...body,serviceId:'rnk'}).ok,false);
   assert.equal(daerim.post({...body,serviceId:'daerim',title:'대림 전용'}).ok,true);
   assert.equal(rnk.list().polls[0].title,'RnK 전용');assert.equal(daerim.list().polls[0].title,'대림 전용');
+  assert.equal(rnk.post({action:'deletePolls',serviceId:'rnk',password:'test-admin-password',ids:[rnk.list().polls[0].id]}).ok,true);
+  assert.equal(daerim.list().polls.length,1);
 });
